@@ -2,6 +2,7 @@ package com.brothercraft.chgp.functions;
 
 import com.brothercraft.chgp.util.Converters;
 import com.laytonsmith.abstraction.MCLocation;
+import com.laytonsmith.abstraction.MCCommandSender;
 import com.laytonsmith.annotations.api;
 import com.laytonsmith.annotations.startup;
 import com.laytonsmith.core.CHVersion;
@@ -18,9 +19,14 @@ import com.laytonsmith.core.environments.Environment;
 import com.laytonsmith.core.exceptions.ConfigRuntimeException;
 import com.laytonsmith.core.functions.AbstractFunction;
 import com.laytonsmith.core.functions.Exceptions.ExceptionType;
+import com.laytonsmith.core.environments.CommandHelperEnvironment;
 import java.util.ArrayList;
 import me.ryanhamshire.GriefPrevention.Claim;
 import me.ryanhamshire.GriefPrevention.GriefPrevention;
+import me.ryanhamshire.GriefPrevention.PlayerData;
+import org.bukkit.entity.Player;
+import org.bukkit.OfflinePlayer;
+import org.bukkit.Bukkit;
 
 public class ClaimData {
     
@@ -60,7 +66,106 @@ public class ClaimData {
 	}
 	    System.out.println("[CommandHelper] CHGP Initialized - ACzChef");
     }
-    
+
+	@api
+	public static class gp_pclaims extends AbstractFunction {
+		public boolean isRestricted() { return true; }
+		public Boolean runAsync() { return false; }
+		public ExceptionType[] thrown() {
+			return new ExceptionType[]{ExceptionType.CastException, ExceptionType.NotFoundException};
+		}
+
+		public Construct exec(Target tar, Environment env, Construct... args) throws ConfigRuntimeException {
+			Static.checkPlugin("GriefPrevention", tar);
+
+
+			GriefPrevention inst = GriefPrevention.instance;
+
+			OfflinePlayer player = null;
+			if (args.length == 1) {
+				if (args[0] instanceof CString) {
+					player = inst.resolvePlayer(args[0].val());
+					if (player == null) {
+						String msg = "Invalid player name. Please use an exact match.";
+						throw new ConfigRuntimeException(msg, ExceptionType.NotFoundException, tar);
+					}
+				} else {
+					String msg = "Expected argument 1 of gp_pclaims to be a string";
+					throw new ConfigRuntimeException(msg, ExceptionType.CastException, tar);
+				}
+			} else {
+				MCCommandSender mcs = env.getEnv(CommandHelperEnvironment.class).GetCommandSender();
+				player = inst.resolvePlayer(mcs.getName());
+			}
+
+			PlayerData playerData = inst.dataStore.getPlayerData(player.getName());
+
+			CArray data = new CArray(tar);
+			CArray claimsList = new CArray(tar);
+			for (int claim_idx = 0; claim_idx < playerData.claims.size(); claim_idx++) {
+				Claim claim = playerData.claims.get(claim_idx);
+				CArray claimData = new CArray(tar);
+				claimData.set("id", new CInt(claim.getID(), tar), tar);
+				claimData.set("area", new CInt(claim.getArea(), tar), tar);
+
+				CArray corners = new CArray(tar);
+
+				MCLocation corner1 = Converters.convertLocation(claim.getLesserBoundaryCorner());
+				MCLocation corner2 = Converters.convertLocation(claim.getGreaterBoundaryCorner());
+
+				CArray Ccorner1 = ObjectGenerator.GetGenerator().location(corner1);
+				CArray Ccorner2 = ObjectGenerator.GetGenerator().location(corner2);
+
+				Ccorner1.remove(new CString("pitch", tar));
+				Ccorner1.remove(new CString("yaw", tar));
+				Ccorner2.remove(new CString("pitch", tar));
+				Ccorner2.remove(new CString("yaw", tar));
+
+				corners.push(Ccorner1);
+				corners.push(Ccorner2);
+				claimData.set("corners", corners, tar);
+
+				claimsList.push(claimData);
+			}
+			CArray claims = new CArray(tar);
+			claims.set("list", claimsList, tar);
+			claims.set("count", new CInt(claimsList.size(), tar), tar);
+			CArray blocks = new CArray(tar);
+			blocks.set("accrued", new CInt(playerData.accruedClaimBlocks, tar), tar);
+			blocks.set("bonus", new CInt((playerData.bonusClaimBlocks + inst.dataStore.getGroupBonusBlocks(player.getName())), tar), tar);
+			blocks.set("total", new CInt((playerData.accruedClaimBlocks + playerData.bonusClaimBlocks + inst.dataStore.getGroupBonusBlocks(player.getName())), tar), tar);
+			blocks.set("available", new CInt(playerData.getRemainingClaimBlocks(), tar), tar);
+
+			data.set("claims", claims, tar);
+			data.set("blocks", blocks, tar);
+
+			if (!player.isOnline()) {
+				inst.dataStore.clearCachedPlayerData(player.getName());
+            }
+
+			return data;
+		}
+
+		public String getName() {
+			return "gp_pclaims";
+		}
+
+		public Integer[] numArgs() {
+			return new Integer[]{0, 1};
+		}
+
+		public String docs() {
+			return "array {[player]} Returns the information of all the claims"
+				+ " owned by the specified player or the current player if the"
+				+ " player was not spefified."
+				+ " This will throw a NotFoundException if the player name does not exists.";
+		}
+
+		public CHVersion since() {
+			return CHVersion.V3_3_1;
+		}
+	}
+
     @api
     public static class get_claim_id extends AbstractFunction {
 
