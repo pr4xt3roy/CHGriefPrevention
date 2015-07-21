@@ -2,9 +2,10 @@ package com.aczchef.chgp.functions;
 
 import com.aczchef.chgp.util.Util;
 import com.laytonsmith.abstraction.MCLocation;
+import com.laytonsmith.abstraction.MCCommandSender;
 import com.laytonsmith.abstraction.MCPlayer;
 import com.laytonsmith.abstraction.bukkit.BukkitMCLocation;
-import com.laytonsmith.abstraction.bukkit.BukkitMCPlayer;
+import com.laytonsmith.abstraction.bukkit.entities.BukkitMCPlayer;
 import com.laytonsmith.annotations.api;
 import com.laytonsmith.core.CHVersion;
 import com.laytonsmith.core.ObjectGenerator;
@@ -23,11 +24,14 @@ import com.laytonsmith.core.functions.AbstractFunction;
 import com.laytonsmith.core.functions.Exceptions;
 import com.laytonsmith.core.functions.Exceptions.ExceptionType;
 import java.util.ArrayList;
+import java.util.UUID;
 import me.ryanhamshire.GriefPrevention.Claim;
 import me.ryanhamshire.GriefPrevention.GriefPrevention;
+import me.ryanhamshire.GriefPrevention.PlayerData;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
+import org.bukkit.OfflinePlayer;
 
 public class Functions {
 
@@ -258,6 +262,113 @@ public class Functions {
 
 	public String docs() {
 	    return "boolean {[player,] location} See if a player can build at a given location.";
+	}
+
+	public CHVersion since() {
+	    return CHVersion.V3_3_1;
+	}
+    }
+
+    @api
+    public static class gp_pclaims extends AbstractFunction {
+	public ExceptionType[] thrown() {
+	    return new ExceptionType[]{ExceptionType.CastException, ExceptionType.NotFoundException};
+	}
+	public boolean isRestricted() {
+	    return true;
+	}
+	public Boolean runAsync() {
+	    return false;
+	}
+
+	public Construct exec(Target tar, Environment env, Construct... args) throws ConfigRuntimeException {
+	    Static.checkPlugin("GriefPrevention", tar);
+
+	    GriefPrevention inst = GriefPrevention.instance;
+
+	    OfflinePlayer player = null;
+	    if (args.length == 1) {
+		if (args[0] instanceof CString) {
+			player = Bukkit.getPlayer(UUID.fromString(args[0].val()));
+			// player = inst.resolvePlayerByName(args[0].val());
+			if (player == null) {
+			String msg = "Invalid player name. Please use an exact match.";
+			throw new ConfigRuntimeException(msg, ExceptionType.NotFoundException, tar);
+			}
+		} else {
+			String msg = "Expected argument 1 of gp_pclaims to be a string";
+			throw new ConfigRuntimeException(msg, ExceptionType.CastException, tar);
+		}
+	    } else {
+		MCPlayer p = env.getEnv(CommandHelperEnvironment.class).GetPlayer();
+		player = ((BukkitMCPlayer) p)._Player();
+		// MCCommandSender mcs = env.getEnv(CommandHelperEnvironment.class).GetCommandSender();
+		// player = inst.getServer.getOfflinePlayer(mcs.getName());
+		// player = inst.resolvePlayerByName(mcs.getName());
+	    }
+
+	    UUID uuid = player.getUniqueId();
+	    PlayerData playerData = inst.dataStore.getPlayerData(uuid);
+
+	    CArray data = new CArray(tar);
+	    CArray claimsList = new CArray(tar);
+	    for (int claim_idx = 0; claim_idx < playerData.getClaims().size(); claim_idx++) {
+		Claim claim = playerData.getClaims().get(claim_idx);
+		CArray claimData = new CArray(tar);
+		claimData.set("id", new CInt(claim.getID(), tar), tar);
+		claimData.set("area", new CInt(claim.getArea(), tar), tar);
+
+		CArray corners = new CArray(tar);
+
+		MCLocation corner1 = Util.Location(claim.getLesserBoundaryCorner());
+		MCLocation corner2 = Util.Location(claim.getGreaterBoundaryCorner());
+
+		CArray Ccorner1 = ObjectGenerator.GetGenerator().location(corner1);
+		CArray Ccorner2 = ObjectGenerator.GetGenerator().location(corner2);
+
+		Ccorner1.remove(new CString("pitch", tar));
+		Ccorner1.remove(new CString("yaw", tar));
+		Ccorner2.remove(new CString("pitch", tar));
+		Ccorner2.remove(new CString("yaw", tar));
+
+		corners.push(Ccorner1);
+		corners.push(Ccorner2);
+		claimData.set("corners", corners, tar);
+
+		claimsList.push(claimData);
+	    }
+	    CArray claims = new CArray(tar);
+	    claims.set("list", claimsList, tar);
+	    claims.set("count", new CInt(claimsList.size(), tar), tar);
+	    CArray blocks = new CArray(tar);
+	    blocks.set("accrued", new CInt(playerData.getAccruedClaimBlocks(), tar), tar);
+	    blocks.set("bonus", new CInt((playerData.getBonusClaimBlocks() + inst.dataStore.getGroupBonusBlocks(player.getUniqueId())), tar), tar);
+	    blocks.set("total", new CInt((playerData.getAccruedClaimBlocks() + playerData.getBonusClaimBlocks() + inst.dataStore.getGroupBonusBlocks(player.getUniqueId())), tar), tar);
+	    blocks.set("available", new CInt(playerData.getRemainingClaimBlocks(), tar), tar);
+
+	    data.set("claims", claims, tar);
+	    data.set("blocks", blocks, tar);
+
+	    if (!player.isOnline()) {
+		inst.dataStore.clearCachedPlayerData(player.getUniqueId());
+	    }
+
+	    return data;
+	}
+
+	public String getName() {
+	    return "gp_pclaims";
+	}
+
+	public Integer[] numArgs() {
+	    return new Integer[]{0, 1};
+	}
+
+	public String docs() {
+	    return "array {[player]} Returns the information of all the claims"
+	    + " owned by the specified player or the current player if the"
+	    + " player was not spefified."
+	    + " This will throw a NotFoundException if the player name does not exists.";
 	}
 
 	public CHVersion since() {
