@@ -30,6 +30,7 @@ import me.ryanhamshire.GriefPrevention.GriefPrevention;
 import me.ryanhamshire.GriefPrevention.PlayerData;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.OfflinePlayer;
 
@@ -81,7 +82,7 @@ public class Functions {
 	}
 
 	public String docs() {
-	    return "int {location} gets the id of a claim at given location";
+	    return "int {location} Gets the id of a claim at given location.";
 	}
 
 	public CHVersion since() {
@@ -112,11 +113,8 @@ public class Functions {
 	    if (args[0] instanceof CArray) {
 		l = ObjectGenerator.GetGenerator().location(args[0], (l != null ? l.getWorld() : null), tar);
 		c = GriefPrevention.instance.dataStore.getClaimAt(Util.Location(l), true, null);
-	    } else if (args[0] instanceof CInt) {
-		long id = Static.getInt(args[0], tar);
-		c = GriefPrevention.instance.dataStore.getClaim(id);
 	    } else {
-		throw new ConfigRuntimeException("Expected argument 1 of get_claim_info to be an array or integer.",
+		throw new ConfigRuntimeException("Expected argument 1 of get_claim_info to be a location array.",
 			ExceptionType.CastException, tar);
 	    }
 
@@ -151,7 +149,7 @@ public class Functions {
 
 	    data.set("corners", corners, tar);
 	    data.set("owner", new CString(c.getOwnerName(), tar), tar);
-	    data.set("isadmin", new CBoolean(c.isAdminClaim(), tar), tar);
+	    data.set("isadmin", CBoolean.get(c.isAdminClaim()), tar);
 	    data.set("Height", new CInt(c.getHeight(), tar), tar);
 
 	    if (c.getID() == null) {
@@ -191,7 +189,7 @@ public class Functions {
 	}
 
 	public String docs() {
-	    return "array {location | id} gets various data about a claim";
+	    return "array {location} Returns various data about a claim.";
 	}
 
 	public CHVersion since() {
@@ -241,14 +239,14 @@ public class Functions {
 
 	    Claim claim = GriefPrevention.instance.dataStore.getClaimAt(location, false, null);
 	    if (claim == null) {
-		return new CBoolean(true, t);
+		return CBoolean.TRUE;
 	    }
-	    String errorMessage = claim.allowBuild(player);
+	    String errorMessage = claim.allowBuild(player, Material.AIR);
 
 	    if (errorMessage == null) {
-		return new CBoolean(true, t);
+		return CBoolean.TRUE;
 	    } else {
-		return new CBoolean(false, t);
+		return CBoolean.FALSE;
 	    }
 	}
 
